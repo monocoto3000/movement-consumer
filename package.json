@@ -7,11 +7,16 @@
         "axios": "^1.6.7",
         "cors": "^2.8.5",
         "express": "^4.17.1",
+        "mqtt": "^5.8.1",
         "socket.io": "^4.4.1",
-        "socket.io-client": "^4.7.5"
+        "socket.io-client": "^4.7.5",
+        "ts-node-dev": "^2.0.0"
     },
     "devDependencies": {
         "@types/amqplib": "^0.10.5",
         "amqplib": "^0.10.0"
+    },
+    "scripts": {
+        "dev": "tsnd --respawn ./movement.consumer.ts"
     }
 }

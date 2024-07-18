@@ -1,42 +1,72 @@
-import * as amqp from "amqplib/callback_api";
 const socketIoClient = require("socket.io-client");
 import { Socket } from "socket.io-client";
+import mqtt from 'mqtt';
 
-const USERNAME = "username";
-const PASSWORD = encodeURIComponent("password");
-const HOSTNAME = "hostname";
-const PORT = 5672;
-const RABBITMQ_QUEUE_DATA = "queue_name";
-const WEBSOCKET_SERVER_URL = "ws_server_url";
+const USERNAME = "protectify";
+const PASSWORD = "adminadmin";
+const HOSTNAME = "54.144.149.49";
+const PORT = 1883;
+const MQTT_TOPIC = "movementData";
+const WEBSOCKET_SERVER_URL = "ws://localhost:80";
 
 let socketIO: Socket;
+let isRoomJoined = false; 
+
 
 async function connect() {
   try {
-    amqp.connect(
-      `amqp://${USERNAME}:${PASSWORD}@${HOSTNAME}:${PORT}`,
-      (err: any, conn: amqp.Connection) => {
-        if (err) throw new Error(err);
-        conn.createChannel((errChannel: any, channel: amqp.Channel) => {
-          if (errChannel) throw new Error(errChannel);
-          channel.assertQueue(RABBITMQ_QUEUE_DATA, {
-            durable: true,
-            arguments: { "x-queue-type": "quorum" },
-          });
-          channel.consume(RABBITMQ_QUEUE_DATA, (data: amqp.Message | null) => {
-            if (data?.content !== undefined) {
-              const parsedContent = JSON.parse(data.content.toString());
-              console.log(`Datos de ${RABBITMQ_QUEUE_DATA}`, parsedContent);
-              socketIO.emit("newMovement", parsedContent);
-              channel.ack(data);
-            }
-          });
-          socketIO = socketIoClient(WEBSOCKET_SERVER_URL);
-        });
+    const client = mqtt.connect(`mqtt://${USERNAME}:${PASSWORD}@${HOSTNAME}:${PORT}`);
+
+    client.on('connect', () => {
+      console.log('Connected to MQTT broker');
+      client.subscribe(MQTT_TOPIC, (err) => {
+        if (err) {
+          console.error('Error subscribing to topic:', err.message);
+        }
+      });
+    });
+
+    client.on('error', (err) => {
+      console.error('MQTT connection error:', err.message);
+    });
+
+    client.on('message', (topic, message) => {
+      if (topic === MQTT_TOPIC) {
+        const parsedContent = JSON.parse(message.toString());
+        console.log('Datos MovimientoData:', parsedContent);
+
+        const userId = parsedContent.id;
+        
+        if (!isRoomJoined) {
+          socketIO.emit('joinRoom', userId);
+          isRoomJoined = true;
+        }
+        
+        socketIO.emit('newMovement', parsedContent);
       }
-    );
+    });
+
+    socketIO = socketIoClient(WEBSOCKET_SERVER_URL, {
+      transports: ['websocket'],
+      path: '/socket.io'
+    });
+
+    socketIO.on('connect', () => {
+      console.log('Connected to WebSocket server');
+    });
+
+    socketIO.on('connect_error', (err: any) => {
+      console.error('WebSocket connection error:', err.message);
+    });
+
+    socketIO.on('disconnect', (reason: any) => {
+      console.error('WebSocket disconnected:', reason);
+      isRoomJoined = false; 
+    });
+
   } catch (err: any) {
-    console.error("Conection error", err);
+    console.error('Error during connection setup:', err.message);
+    throw new Error(err);
   }
 }
 
