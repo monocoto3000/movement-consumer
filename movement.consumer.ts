@@ -1,42 +1,72 @@
-import * as amqp from "amqplib/callback_api";
-const socketIoClient = require("socket.io-client");
-import { Socket } from "socket.io-client";
+import mqtt from 'mqtt';
+import { io, Socket } from 'socket.io-client';
 
-const USERNAME = "username";
-const PASSWORD = encodeURIComponent("password");
-const HOSTNAME = "hostname";
-const PORT = 5672;
-const RABBITMQ_QUEUE_DATA = "queue_name";
-const WEBSOCKET_SERVER_URL = "ws_server_url";
+const USERNAME = "protectify";
+const PASSWORD = "adminadmin"; 
+const HOSTNAME = "rabbit_host";
+const PORT = 1883;
+const MQTT_TOPIC = "topic_name";
+const WEBSOCKET_SERVER_URL = "http://ws_url:port";
 
 let socketIO: Socket;
 
+async function sendDatatoWebSocket(data: any) {
+  try {
+    if (socketIO) {
+      console.log('Sending data to WebSocket:', data);
+      socketIO.emit('event_name', data); 
+    } else {
+      console.error('WebSocket client is not initialized');
+    }
+  } catch (error: any) {
+    console.error('Error sending data to WebSocket:', error.message);
+  }
+}
+
 async function connect() {
   try {
-    amqp.connect(
-      `amqp://${USERNAME}:${PASSWORD}@${HOSTNAME}:${PORT}`,
-      (err: any, conn: amqp.Connection) => {
-        if (err) throw new Error(err);
-        conn.createChannel((errChannel: any, channel: amqp.Channel) => {
-          if (errChannel) throw new Error(errChannel);
-          channel.assertQueue(RABBITMQ_QUEUE_DATA, {
-            durable: true,
-            arguments: { "x-queue-type": "quorum" },
-          });
-          channel.consume(RABBITMQ_QUEUE_DATA, (data: amqp.Message | null) => {
-            if (data?.content !== undefined) {
-              const parsedContent = JSON.parse(data.content.toString());
-              console.log(`Datos de ${RABBITMQ_QUEUE_DATA}`, parsedContent);
-              socketIO.emit("newMovement", parsedContent);
-              channel.ack(data);
-            }
-          });
-          socketIO = socketIoClient(WEBSOCKET_SERVER_URL);
-        });
+    const client = mqtt.connect(`mqtt://${USERNAME}:${PASSWORD}@${HOSTNAME}:${PORT}`);
+
+    client.on('connect', () => {
+      console.log('Connected to MQTT broker');
+      client.subscribe(MQTT_TOPIC, (err) => {
+        if (err) {
+          console.error('Error subscribing to topic:', err.message);
+        }
+      });
+    });
+
+    client.on('message', async (topic, message) => {
+      if (topic === MQTT_TOPIC) {
+        try {
+          const parsedContent = JSON.parse(message.toString());
+          console.log('Received data from MQTT:', parsedContent);
+          await sendDatatoWebSocket(parsedContent);
+        } catch (error: any) {
+          console.error('Error parsing MQTT message:', error.message);
+        }
       }
-    );
+    });
+
+    socketIO = io(WEBSOCKET_SERVER_URL, {
+      transports: ['websocket'],
+      path: '/socket.io'
+    });
+
+    socketIO.on('connect', () => {
+      console.log('Connected to WebSocket server');
+    });
+
+    socketIO.on('connect_error', (err: any) => {
+      console.error('WebSocket connection error:', err.message);
+    });
+
+    socketIO.on('disconnect', (reason) => {
+      console.error('WebSocket disconnected:', reason);
+    });
+
   } catch (err: any) {
-    console.error("Conection error", err);
+    console.error('Error during connection setup:', err.message);
   }
 }
 
