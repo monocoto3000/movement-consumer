@@ -11,7 +11,7 @@ async function sendDatatoWebSocket(data: any) {
   try {
     if (socketIO) {
       console.log('Sending data to WebSocket:', data);
-      socketIO.emit('data', data);
+      socketIO.emit('newMovement', data);
     } else {
       console.error('WebSocket client is not initialized');
     }
