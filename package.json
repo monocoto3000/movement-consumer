@@ -17,6 +17,8 @@
         "amqplib": "^0.10.0"
     },
     "scripts": {
-        "dev": "tsnd --respawn ./movement.consumer.ts"
+        "dev": "tsnd --respawn ./movement.consumer.ts",
+        "build": "tsc",
+        "start": "node movement.consumer.js"
     }
 }
